@@ -1,46 +1,48 @@
 import RPi.GPIO as GPIO
-from mfrc522 import SimpleMFRC522
-from enum import Enum;
 import paho.mqtt.client as paho
 import time
+import math
+import uuid
+from mfrc522 import SimpleMFRC522
+#from enum import Enum;
+from datetime import datetime
 
 ### MAIN ###
 def main():
-    while True:
-        try:
-            print('Place Tag')
-            id, text = reader.read()
-            print(id)
-            print(text)
-            sendRfidText(text)
-            receive()
-        finally:
-            GPIO.cleanup()
-            client.disconnect()
-
-# Response Status
-class Status(Enum):
-    OK = 1
-    BAD = 2
-    ERORR = 3
-    UNKOWN = 4
+    try:
+        while True:
+            #chipinfo = readRfid()
+            #sendVerificationRequest(chipinfo)
+            #test user: max.mustermann:&FXkv[\W8PCM9!vY
+            sendVerificationRequest("bWF4Lm11c3Rlcm1hbm46JkZYa3ZbXFc4UENNOSF2WQ==")
+            receiveVerification()
+    finally:
+        GPIO.cleanup()
+        client.disconnect()
 
 # MQTT Init
 def on_message(client, userdata, msg):
+    global messageReceived
+    global unixtime
+    messageReceived = True
+    client.unsubscribe(responseTopic + "/" + str(unixtime))
     msgResponse = int(msg.payload)
-    print(msg.topic+" "+str(msg.qos)+" "+ str(msgResponse))
-    received(msgResponse)
+    print("Response received on topic " + msg.topic + ": " + str(msgResponse))
+    processResponse(msgResponse)
 
 mqttHost = "localhost"
+userid = str(uuid.uuid4())
+responseTopic = "SeQLock/respose/user" + userid
+requestTopic = "SeQLock/verify"
 client = paho.Client()
 client.connect(mqttHost, 1883)
 client.on_message = on_message
-client.subscribe("SeQLock/respose")
 
 # RFID Init
 reader = SimpleMFRC522()
 
 # LED Init
+ledDuration = 10
 green = 15
 yellow = 13
 red = 11
@@ -50,17 +52,36 @@ GPIO.setup(red,GPIO.OUT)
 GPIO.setup(yellow,GPIO.OUT)
 GPIO.setup(green,GPIO.OUT)
 
+# Read Rfid Chip
+def readRfid():
+    print('Waiting for input...')
+    id, text = reader.read()
+    print(id)
+    print(text)
+    return text
+
 # Send Request to Security Server
-def sendRfidText(text):
-    client.publish("SeQLock/verify", text)
-    print('send')
+def sendVerificationRequest(body):
+    global unixtime
+    dt = datetime.now()
+    ts = datetime.timestamp(dt)
+    unixtime = math.floor(ts)
+    msg = "{\"basic\":\""+body+"\",\"timestamp\":\""+str(unixtime)+ "\",\"userid\":\"" + userid + "\"}"
+    client.publish(requestTopic, body)
+    print("Send: " + msg + " to topic " + requestTopic)
+    
+    client.subscribe(responseTopic + "/" + str(unixtime))
+    print("Subscribed to topic " + responseTopic + "/" + str(unixtime) + " at host " + mqttHost)
 
 # Receive Security Server Response
-def receive():
-    while (True):
+def receiveVerification():
+    global messageReceived
+    messageReceived = False
+    while (messageReceived == False):
         client.loop()
 
-def received(status):
+# Received Security Server Response
+def processResponse(status):
     if status == 1:
         GPIO.output(green,GPIO.HIGH)
     elif status == 2:
@@ -73,19 +94,10 @@ def received(status):
         GPIO.output(yellow,GPIO.HIGH)
     else:
         GPIO.output(yellow,GPIO.HIGH)
-    time.sleep(5)
+    time.sleep(ledDuration)
     GPIO.output(red,GPIO.LOW)
     GPIO.output(yellow,GPIO.LOW)
     GPIO.output(green,GPIO.LOW)
 
 # Main Call
 main()
-
-
-GPIO.output(red,GPIO.HIGH)
-GPIO.output(yellow,GPIO.HIGH)
-GPIO.output(green,GPIO.HIGH)
-GPIO.output(red,GPIO.LOW)
-GPIO.output(yellow,GPIO.LOW)
-GPIO.output(green,GPIO.LOW)
-time.sleep(1)

@@ -19,34 +19,43 @@ public class SecureServer {
 		var client = new SimpleMqttClient("localhost") {
 			@Override
 			public void messageArrived(String topic, MqttMessage message) throws Exception {
-				System.out.println("Message received at topic " + topic + ": message");
-				JSONObject requestObject = new JSONObject(message);
-				var payload = (JSONArray)requestObject.get("payload");
-				var jsonarray = payload.toList();
+				try {
+					System.out.println("Message received at topic " + topic + ": " + message);
+					JSONObject requestObject = new JSONObject(message);
+					var payload = (JSONArray)requestObject.get("payload");
+					var jsonarray = payload.toList();
 				
-				byte[] bytes = new byte[jsonarray.size()];;
+					byte[] bytes = new byte[jsonarray.size()];;
 				
-				for (var i = 0; i < jsonarray.size(); i++) {
-					bytes[i] = (byte)jsonarray.get(i);
-				}
-				
-				String requestBody = new String(bytes);
-				
-				JSONObject requestBodyObject = new JSONObject(requestBody);
-				
-				var userid = requestBodyObject.get("userid");
-				var timestamp = requestBodyObject.get("timestamp");
-				var basic = requestBodyObject.get("basic");
-				
-				var responseTopic = "SeQLock/response/user" + userid + "/" + timestamp;
-				
-				for (User user: users) {
-					if (user.getBasicAuth() == basic) {
-						this.publish(responseTopic, "1");
-						return;
+					for (var i = 0; i < jsonarray.size(); i++) {
+						bytes[i] = (byte)jsonarray.get(i);
 					}
+				
+					String requestBody = new String(bytes);
+				
+				
+					JSONObject requestBodyObject = new JSONObject(requestBody);
+				
+					var userid = requestBodyObject.get("userid");
+					var timestamp = requestBodyObject.get("timestamp");
+					var basic = requestBodyObject.get("basic");
+				
+					var responseTopic = "SeQLock/response/user" + userid + "/" + timestamp;
+				
+					System.out.println("Response Topic: " + responseTopic);
+				
+					basic = basic.toString().replaceAll("\\s+", "");
+				
+					for (User user: users) {
+						if (user.getBasicAuth().equals(basic)) {
+							this.publish(responseTopic, "1");
+							return;
+						}
+					}
+					this.publish(responseTopic, "2");
+				} catch (Exception e) {
+					System.out.println("Error in JSON request!");
 				}
-				this.publish(responseTopic, "2");
 			}
 		};
 		client.subscribe("SeQLock/verify");
@@ -59,7 +68,9 @@ public class SecureServer {
 	
 	public static void main(String[] args) {
 		var server = new SecureServer();
-		server.addUser("max.mustermann", "&FXkv[\\W8PCM9!vY");
+		server.addUser("jokab", "asd123");
+		server.addUser("mett", "321dsa");
 		server.startup();
 	}
 }
+// mvn compiler:compile exec:java -Dexec.mainClass=com.SeQLock.SecureServer.SecureServer

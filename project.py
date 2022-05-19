@@ -11,10 +11,10 @@ from datetime import datetime
 def main():
     try:
         while True:
-            #chipinfo = readRfid()
-            #sendVerificationRequest(chipinfo)
+            chipinfo = readRfid()
+            sendVerificationRequest(chipinfo)
             #test user: max.mustermann:&FXkv[\W8PCM9!vY
-            sendVerificationRequest("bWF4Lm11c3Rlcm1hbm46JkZYa3ZbXFc4UENNOSF2WQ==")
+            #sendVerificationRequest("bWF4Lm11c3Rlcm1hbm46JkZYa3ZbXFc4UENNOSF2WQ==")
             receiveVerification()
     finally:
         GPIO.cleanup()
@@ -32,7 +32,7 @@ def on_message(client, userdata, msg):
 
 mqttHost = "localhost"
 userid = str(uuid.uuid4())
-responseTopic = "SeQLock/respose/user" + userid
+responseTopic = "SeQLock/response/user" + userid
 requestTopic = "SeQLock/verify"
 client = paho.Client()
 client.connect(mqttHost, 1883)
@@ -42,9 +42,9 @@ client.on_message = on_message
 reader = SimpleMFRC522()
 
 # LED Init
-ledDuration = 10
-green = 15
-yellow = 13
+ledDuration = 3
+green = 13
+yellow = 15
 red = 11
 
 GPIO.setmode(GPIO.BOARD)
@@ -66,13 +66,14 @@ def sendVerificationRequest(body):
     dt = datetime.now()
     ts = datetime.timestamp(dt)
     unixtime = math.floor(ts)
-    msg = "{\"basic\":\""+body+"\",\"timestamp\":\""+str(unixtime)+ "\",\"userid\":\"" + userid + "\"}"
-    client.publish(requestTopic, body)
-    print("Send: " + msg + " to topic " + requestTopic)
     
     client.subscribe(responseTopic + "/" + str(unixtime))
     print("Subscribed to topic " + responseTopic + "/" + str(unixtime) + " at host " + mqttHost)
-
+    
+    msg = "{\"basic\":\""+body+"\",\"timestamp\":\""+str(unixtime)+ "\",\"userid\":\"" + userid + "\"}"
+    client.publish(requestTopic, msg)
+    print("Send: " + msg + " to topic " + requestTopic)
+    
 # Receive Security Server Response
 def receiveVerification():
     global messageReceived
